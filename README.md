@@ -2,7 +2,7 @@
 
 Zone Rollout Control 是仅依赖 Go 标准库的本机 HTTP 控制面，用于协调区域版本上线。它管理滚动计划、不可变区域版本、解析节点租约、探针结果和一致性判定。
 
-本仓库是健康项目初始化基线。当前不包含单元测试、夹具或浏览器测试；测试工作有意延后到后续测试阶段。现在通过真实 HTTP 路由的生产探针验证构建和四条核心工作流。
+本仓库是健康项目初始化基线。当前不包含单元测试、夹具或浏览器测试；测试工作有意延后到后续测试阶段。现在通过真实 HTTP 路由的生产探针验证构建和五条核心工作流。
 
 ## 环境要求
 
@@ -135,6 +135,46 @@ curl -sS -X PATCH http://127.0.0.1:8090/v1/plans/<plan_id>/assessments \
   -d '{"request_key": "assess-request-0001"}'
 ```
 
+### 查询计划列表
+
+`GET /v1/plans` 支持以下可选参数，多个过滤条件以 AND 组合：
+
+- `state`：计划状态，`draft`、`active` 或 `completed`。
+- `zone`：区域名称，按与创建计划相同的规则规范化后精确匹配。
+- `activated_after` / `activated_before`：RFC3339 时间，按激活时间闭区间过滤；未激活计划不匹配。
+- `serial_min` / `serial_max`：最新区域版本序列号的闭区间；没有版本的计划不匹配。
+- `order`：`newest_created`（默认，最新创建在前）或 `oldest_created`（最早创建在前）。
+- `limit`：每页数量，1 到 100，默认 50。
+- `cursor`：上一页 `meta.next_cursor`。
+
+排序固定为 `(created_at, id)` 全序，游标内嵌当时的过滤条件、排序和末项位置，同一读取快照中不会重复或跳项。游标只能在完全相同的过滤和排序下继续；条件变化或混用旧格式游标会返回 `400 validation_failed`，调用方应去掉游标重新开始。翻页期间新创建的计划不会插入当前遍历；不带游标重新查询即可看到它们。
+
+响应 `meta` 返回当前过滤摘要、排序、`has_more` 和 `next_cursor`：
+
+```json
+{
+  "data": {
+    "items": [],
+    "meta": {
+      "limit": 50,
+      "has_more": true,
+      "order": "newest_created",
+      "next_cursor": "cGxhbi1saXN0LXYy...",
+      "filter": {
+        "state": "active",
+        "zone": "edge.example",
+        "activated_after": "2026-09-01T00:00:00Z",
+        "activated_before": "2026-10-01T00:00:00Z",
+        "serial_min": 2026090100,
+        "serial_max": 2026093100
+      }
+    }
+  }
+}
+```
+
+不带任何新参数（仅 `state`、`limit`、旧格式 `cursor`）的请求保持原有 ID 升序行为和游标格式。
+
 ## API 概览
 
 成功响应：
@@ -168,7 +208,7 @@ curl -sS -X PATCH http://127.0.0.1:8090/v1/plans/<plan_id>/assessments \
 | `PUT` | `/v1/nodes` | 登记解析节点 |
 | `GET` | `/v1/nodes` | 按状态和区域分页查询节点 |
 | `PUT` | `/v1/plans` | 创建计划草稿 |
-| `GET` | `/v1/plans` | 按状态分页查询计划 |
+| `GET` | `/v1/plans` | 组合过滤、固定排序和游标分页查询计划 |
 | `GET` | `/v1/plans/{id}` | 查询计划 |
 | `PATCH` | `/v1/plans/{id}/revisions` | 添加区域版本 |
 | `PATCH` | `/v1/plans/{id}/activate` | 激活计划 |
@@ -209,10 +249,11 @@ curl -sS -X PATCH http://127.0.0.1:8090/v1/plans/<plan_id>/assessments \
 
 ## 验证
 
-测试阶段有意延后，因此当前不运行单元测试或浏览器测试。以下命令分别验证四条工作流；每条命令启动真实本机 HTTP 服务、使用独立临时状态、覆盖成功与失败路径，然后关闭服务：
+测试阶段有意延后，因此当前不运行单元测试或浏览器测试。以下命令分别验证五条工作流；每条命令启动真实本机 HTTP 服务、使用独立临时状态、覆盖成功与失败路径，然后关闭服务：
 
 ```bash
 go run ./cmd/workflowprobe plan-revision-lifecycle
+go run ./cmd/workflowprobe plan-list-browsing
 go run ./cmd/workflowprobe node-lease-allocation
 go run ./cmd/workflowprobe probe-ingestion
 go run ./cmd/workflowprobe consistency-assessment

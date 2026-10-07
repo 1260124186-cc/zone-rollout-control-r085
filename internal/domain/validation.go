@@ -61,6 +61,19 @@ func NormalizePlanInput(input PlanCreateInput) PlanCreateInput {
 	return input
 }
 
+// NormalizeDNSName canonicalizes a DNS name the same way plan zones are
+// normalized: surrounding whitespace is removed, letters are lower-cased, and
+// a trailing dot is stripped. It rejects names that are not valid zone names.
+func NormalizeDNSName(value string) (string, error) {
+	name := canonicalName(value)
+	if err := validateCanonicalName(name); err != nil {
+		return "", Validation("zone is invalid", map[string]any{
+			"zone": err.Error(),
+		})
+	}
+	return name, nil
+}
+
 func ValidatePlanInput(input PlanCreateInput) error {
 	input = NormalizePlanInput(input)
 	details := make(map[string]any)

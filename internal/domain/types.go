@@ -162,9 +162,42 @@ type PageMeta struct {
 	NextCursor string `json:"next_cursor,omitempty"`
 }
 
+// PlanListOrder selects the fixed ordering used by the plan list flow.
+type PlanListOrder string
+
+const (
+	// PlanOrderOldest sorts plans from the earliest created plan to the newest.
+	PlanOrderOldest PlanListOrder = "oldest_created"
+	// PlanOrderNewest sorts plans from the newest created plan to the earliest.
+	PlanOrderNewest PlanListOrder = "newest_created"
+)
+
+// PlanListFilter is the normalized, stable summary of the filters applied to a
+// plan list page. It is returned verbatim in the page meta so callers can see
+// exactly which combination was evaluated.
+type PlanListFilter struct {
+	State           PlanState  `json:"state,omitempty"`
+	Zone            string     `json:"zone,omitempty"`
+	ActivatedAfter  *time.Time `json:"activated_after,omitempty"`
+	ActivatedBefore *time.Time `json:"activated_before,omitempty"`
+	SerialMin       uint32     `json:"serial_min,omitempty"`
+	SerialMax       uint32     `json:"serial_max,omitempty"`
+}
+
+// PlanPageMeta describes paging for a plan list page. Limit, NextCursor and the
+// JSON field names stay compatible with the original single-state list; the
+// filter summary, order and HasMore flag are additive.
+type PlanPageMeta struct {
+	Limit      int            `json:"limit"`
+	NextCursor string         `json:"next_cursor,omitempty"`
+	HasMore    bool           `json:"has_more"`
+	Order      PlanListOrder  `json:"order,omitempty"`
+	Filter     PlanListFilter `json:"filter"`
+}
+
 type PlanPage struct {
 	Items []RolloutPlan `json:"items"`
-	Meta  PageMeta      `json:"meta"`
+	Meta  PlanPageMeta  `json:"meta"`
 }
 
 type NodePage struct {
