@@ -250,7 +250,7 @@ ready --lease--> leased --report--> ready
 - `PUT /v1/nodes`
 - `GET /v1/nodes`
 - `PUT /v1/plans`
-- `GET /v1/plans`
+- `GET /v1/plans`（可组合 `state`、`zone`、`activated_after`、`activated_before`、`serial_min`、`serial_max`，支持 `order=id_asc|created_asc|created_desc` 和游标分页；meta 返回过滤摘要、`has_more`、生效顺序和读取快照版本）
 - `GET /v1/plans/{id}`
 - `PATCH /v1/plans/{id}/revisions`
 - `PATCH /v1/plans/{id}/activate`
@@ -271,6 +271,7 @@ ready --lease--> leased --report--> ready
 - 错误传播：领域错误稳定映射到 HTTP 状态和错误代码。
 - 边界校验：DNS 名称、IP、序列号、延迟、比例、分页和能力均显式验证。
 - 并发入口：HTTP 处理器可并发运行，状态修改通过互斥锁串行化。
+- 快照游标：扩展计划列表的游标固定过滤、顺序和状态修订号；同一次遍历只读同一快照，不重复不跳项；并发写入后旧游标返回 `cursor_stale`，过滤或顺序变化返回 `cursor_invalid`；仅按状态、默认排序的旧查询继续使用裸标识游标。
 
 这些机制为后续工程任务提供了多个独立行为面，但本阶段不创建缺陷、不写测试，也不生成缺陷票据。
 

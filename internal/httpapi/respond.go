@@ -63,7 +63,7 @@ func sendJSON(w http.ResponseWriter, status int, value any) {
 
 func statusCode(code domain.ErrorCode) int {
 	switch code {
-	case domain.CodeValidationFailed:
+	case domain.CodeValidationFailed, domain.CodeCursorInvalid:
 		return http.StatusBadRequest
 	case domain.CodeNotFound:
 		return http.StatusNotFound
@@ -74,6 +74,7 @@ func statusCode(code domain.ErrorCode) int {
 		domain.CodeNodeUnavailable,
 		domain.CodeLeaseExpired,
 		domain.CodeLeaseNotClaimed,
+		domain.CodeCursorStale,
 		domain.CodeConflict:
 		return http.StatusConflict
 	case domain.CodeNoProbes:

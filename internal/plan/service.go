@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"reflect"
-	"sort"
 
 	"solo-0014-zone-rollout-control/internal/domain"
 	"solo-0014-zone-rollout-control/internal/platform"
@@ -203,48 +202,6 @@ func (s *Service) LatestRevision(
 		return nil
 	})
 	return revision, err
-}
-
-func (s *Service) List(
-	ctx context.Context,
-	stateFilter domain.PlanState,
-	limit int,
-	cursor string,
-) (domain.PlanPage, error) {
-	if limit < 1 || limit > 100 {
-		return domain.PlanPage{}, domain.Validation("limit must be between 1 and 100", map[string]any{
-			"limit": limit,
-		})
-	}
-	after, err := platform.DecodeCursor(cursor)
-	if err != nil {
-		return domain.PlanPage{}, domain.Validation("cursor is invalid", nil)
-	}
-	var page domain.PlanPage
-	err = s.store.Read(ctx, func(state *domain.State) error {
-		items := make([]domain.RolloutPlan, 0, len(state.Plans))
-		for _, plan := range state.Plans {
-			if stateFilter != "" && plan.State != stateFilter {
-				continue
-			}
-			if after != "" && plan.ID <= after {
-				continue
-			}
-			items = append(items, plan)
-		}
-		sort.Slice(items, func(i, j int) bool {
-			return items[i].ID < items[j].ID
-		})
-		page.Meta.Limit = limit
-		if len(items) > limit {
-			page.Items = append(page.Items, items[:limit]...)
-			page.Meta.NextCursor = platform.EncodeCursor(items[limit-1].ID)
-			return nil
-		}
-		page.Items = append(page.Items, items...)
-		return nil
-	})
-	return page, err
 }
 
 func (s *Service) RevisionExists(

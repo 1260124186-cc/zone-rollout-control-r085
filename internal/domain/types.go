@@ -162,9 +162,18 @@ type PageMeta struct {
 	NextCursor string `json:"next_cursor,omitempty"`
 }
 
+type PlanPageMeta struct {
+	Limit            int               `json:"limit"`
+	NextCursor       string            `json:"next_cursor,omitempty"`
+	HasMore          bool              `json:"has_more"`
+	Order            PlanOrder         `json:"order"`
+	SnapshotRevision uint64            `json:"snapshot_revision"`
+	Filter           PlanFilterSummary `json:"filter"`
+}
+
 type PlanPage struct {
 	Items []RolloutPlan `json:"items"`
-	Meta  PageMeta      `json:"meta"`
+	Meta  PlanPageMeta  `json:"meta"`
 }
 
 type NodePage struct {

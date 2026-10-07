@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"solo-0014-zone-rollout-control/internal/domain"
 )
@@ -36,12 +37,48 @@ func (s *Server) listPlans(w http.ResponseWriter, r *http.Request) {
 		}
 		limit = parsed
 	}
-	state := domain.PlanState(strings.TrimSpace(r.URL.Query().Get("state")))
-	if state != "" && state != domain.PlanDraft && state != domain.PlanActive && state != domain.PlanCompleted {
-		sendError(w, r, domain.Validation("plan state is not supported", map[string]any{"state": state}))
-		return
+	query := domain.PlanListQuery{
+		State:  domain.PlanState(strings.TrimSpace(r.URL.Query().Get("state"))),
+		Zone:   strings.TrimSpace(r.URL.Query().Get("zone")),
+		Order:  domain.PlanOrder(strings.TrimSpace(r.URL.Query().Get("order"))),
+		Limit:  limit,
+		Cursor: r.URL.Query().Get("cursor"),
 	}
-	page, err := s.plans.List(r.Context(), state, limit, r.URL.Query().Get("cursor"))
+	if raw := strings.TrimSpace(r.URL.Query().Get("activated_after")); raw != "" {
+		parsed, err := time.Parse(time.RFC3339, raw)
+		if err != nil {
+			sendError(w, r, domain.Validation("activated_after must be an RFC3339 timestamp", map[string]any{"activated_after": raw}))
+			return
+		}
+		query.ActivatedAfter = &parsed
+	}
+	if raw := strings.TrimSpace(r.URL.Query().Get("activated_before")); raw != "" {
+		parsed, err := time.Parse(time.RFC3339, raw)
+		if err != nil {
+			sendError(w, r, domain.Validation("activated_before must be an RFC3339 timestamp", map[string]any{"activated_before": raw}))
+			return
+		}
+		query.ActivatedBefore = &parsed
+	}
+	for _, param := range []string{"serial_min", "serial_max"} {
+		raw := strings.TrimSpace(r.URL.Query().Get(param))
+		if raw == "" {
+			continue
+		}
+		parsed, err := strconv.ParseUint(raw, 10, 32)
+		if err != nil || parsed == 0 {
+			sendError(w, r, domain.Validation(param+" must be a serial number between 1 and 4294967295", map[string]any{param: raw}))
+			return
+		}
+		serial := uint32(parsed)
+		switch param {
+		case "serial_min":
+			query.SerialMin = &serial
+		case "serial_max":
+			query.SerialMax = &serial
+		}
+	}
+	page, err := s.plans.ListByQuery(r.Context(), query)
 	if err != nil {
 		sendError(w, r, err)
 		return

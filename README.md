@@ -168,7 +168,7 @@ curl -sS -X PATCH http://127.0.0.1:8090/v1/plans/<plan_id>/assessments \
 | `PUT` | `/v1/nodes` | 登记解析节点 |
 | `GET` | `/v1/nodes` | 按状态和区域分页查询节点 |
 | `PUT` | `/v1/plans` | 创建计划草稿 |
-| `GET` | `/v1/plans` | 按状态分页查询计划 |
+| `GET` | `/v1/plans` | 按状态、区域、激活时间段和最新序列号范围组合查询，支持创建时间排序和游标分页 |
 | `GET` | `/v1/plans/{id}` | 查询计划 |
 | `PATCH` | `/v1/plans/{id}/revisions` | 添加区域版本 |
 | `PATCH` | `/v1/plans/{id}/activate` | 激活计划 |
@@ -178,6 +178,42 @@ curl -sS -X PATCH http://127.0.0.1:8090/v1/plans/<plan_id>/assessments \
 | `PATCH` | `/v1/leases/{id}/probes` | 登记探针并完成租约 |
 | `PATCH` | `/v1/plans/{id}/assessments` | 创建一致性判定 |
 | `GET` | `/v1/plans/{id}/assessments/latest` | 查询最近判定 |
+
+## 计划列表组合查询
+
+`GET /v1/plans` 支持在同一页组合下列查询参数（均可省略）：
+
+- `state`：`draft`、`active` 或 `completed`，保持原有单一状态过滤。
+- `zone`：区域名称，按规范化后的小写名称精确匹配。
+- `activated_after`、`activated_before`：RFC3339 时间，按计划 `activated_at` 过滤；无激活时间的计划不匹配。
+- `serial_min`、`serial_max`：1 到 4294967295，按计划最新区域版本的序列号过滤；尚无版本的计划不匹配。
+- `order`：`id_asc`（默认，原行为）、`created_asc`（最早创建优先）或 `created_desc`（最近创建优先）；创建时间相同时按计划标识决胜。
+- `limit`：1 到 100，默认 50。
+- `cursor`：上一页返回的 `next_cursor`。
+
+分页 meta 返回过滤摘要、生效顺序、读取快照版本和是否还有后续：
+
+```json
+{
+  "items": [],
+  "meta": {
+    "limit": 50,
+    "next_cursor": "eyJ2ZXJzaW9uIjoy...",
+    "has_more": true,
+    "order": "created_desc",
+    "snapshot_revision": 12,
+    "filter": {
+      "state": "active",
+      "zone": "edge.example",
+      "activated_after": "2026-09-01T00:00:00Z",
+      "serial_min": 100,
+      "serial_max": 500
+    }
+  }
+}
+```
+
+扩展查询（使用新增过滤或创建时间排序）的游标固定其过滤、顺序和读取快照：同一次遍历的各页读取同一快照，不会重复或跳过计划；期间有新计划写入时，旧游标返回 `409 cursor_stale`，客户端去掉游标重新开始即可。游标与当前过滤或顺序不一致时返回 `400 cursor_invalid`。仅使用 `state` 且默认排序时继续沿用原裸标识游标，响应中的计划对象字段保持不变。
 
 ## 状态及失败行为
 
@@ -209,10 +245,11 @@ curl -sS -X PATCH http://127.0.0.1:8090/v1/plans/<plan_id>/assessments \
 
 ## 验证
 
-测试阶段有意延后，因此当前不运行单元测试或浏览器测试。以下命令分别验证四条工作流；每条命令启动真实本机 HTTP 服务、使用独立临时状态、覆盖成功与失败路径，然后关闭服务：
+测试阶段有意延后，因此当前不运行单元测试或浏览器测试。以下命令分别验证五条工作流；每条命令启动真实本机 HTTP 服务、使用独立临时状态、覆盖成功与失败路径，然后关闭服务：
 
 ```bash
 go run ./cmd/workflowprobe plan-revision-lifecycle
+go run ./cmd/workflowprobe plan-list-query
 go run ./cmd/workflowprobe node-lease-allocation
 go run ./cmd/workflowprobe probe-ingestion
 go run ./cmd/workflowprobe consistency-assessment
